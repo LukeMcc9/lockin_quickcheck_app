@@ -5,7 +5,7 @@
 Lock-In Quick Check — Streamlit (CSV-backed, fast)
 - Loads league-wide game logs from a prebuilt CSV (past 2 Regular Seasons)
 - Player select with typeahead
-- Beeswarm plot locating the input score within the player's distribution
+- Distribution view: histogram (density) + KDE curve + rug of data points
 - Stoplight colors for the recommendation (shaded by bucket)
 - No live NBA API calls
 """
@@ -26,11 +26,7 @@ st.set_page_config(
     page_title="Lock-In Quick Check",
     page_icon="✅",
     layout="centered",
-    menu_items={
-        "Get Help": None,
-        "Report a bug": None,
-        "About": None
-    }
+    menu_items={"Get Help": None, "Report a bug": None, "About": None},
 )
 
 st.title("Lock-In Quick Check")
@@ -119,6 +115,37 @@ def colored_badge(text: str, fg: str, bg: str) -> str:
     """
 
 
+# ---------- Simple KDE (no extra deps) ----------
+def kde_curve(x: np.ndarray, points: int = 256) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Gaussian KDE with Silverman's bandwidth. Returns (grid_x, density_y).
+    """
+    x = np.asarray(x, dtype=float)
+    x = x[np.isfinite(x)]
+    n = x.size
+    if n < 2:
+        if n == 1:
+            grid = np.linspace(x.min(), x.max() + 1, points)
+            dens = np.full_like(grid, 1.0 / (grid.max() - grid.min()))
+            return grid, dens
+        return np.array([]), np.array([])
+
+    std = np.std(x, ddof=1)
+    if std == 0:
+        grid = np.linspace(x.min(), x.max() + 1, points)
+        dens = np.full_like(grid, 1.0 / (grid.max() - grid.min()))
+        return grid, dens
+
+    h = 1.06 * std * (n ** (-1 / 5))  # Silverman's rule
+    lo = max(0, x.min() - 1 * std)    # Floor at 0 (no negatives)
+    hi = x.max() + 3 * std
+    grid = np.linspace(lo, hi, points)
+
+    diffs = (grid[:, None] - x[None, :]) / h
+    dens = np.exp(-0.5 * diffs**2).sum(axis=1) / (n * h * np.sqrt(2 * np.pi))
+    return grid, dens
+
+
 # ---------- Load Data ----------
 if not CSV_PATH.exists():
     st.error(f"Baseline CSV not found at: {CSV_PATH}")
@@ -153,29 +180,41 @@ if go:
     fg, bg = rec_colors(rec)
     st.markdown(colored_badge(rec, fg, bg), unsafe_allow_html=True)
 
-    # ---------- Beeswarm ----------
+    # ---------- Distribution: histogram + KDE + rug ----------
     st.subheader("Where this score lands")
     if dist.empty:
         st.info("No distribution available.")
     else:
         x = dist.values.astype(float)
-        rng = np.random.default_rng(42)
-        y = rng.normal(loc=0.0, scale=0.04, size=len(x))  # vertical jitter
 
-        fig, ax = plt.subplots(figsize=(8, 2.2))
-        ax.scatter(x, y, alpha=0.5, s=14)
+        fig, ax = plt.subplots(figsize=(8, 3))
+
+        # Histogram (density)
+        ax.hist(x, bins="auto", density=True, alpha=0.3)
+
+        # KDE
+        grid, dens = kde_curve(x)
+        if grid.size > 0:
+            ax.plot(grid, dens, linewidth=2)
+
+        # Vertical line for input score
         ax.axvline(score, linestyle="--")
-        ax.set_yticks([])
+
+        # Rug plot (sample to limit overdraw for very large n)
+        if x.size > 0:
+            max_d = dens.max() if grid.size > 0 else 0.02
+            rug_h = max(0.02, 0.04 * max_d)
+            rng = np.random.default_rng(123)
+            if x.size > 400:
+                rug_x = rng.choice(x, size=400, replace=False)
+            else:
+                rug_x = x
+            for xi in rug_x:
+                ax.vlines(xi, 0, rug_h, alpha=0.25)
+
+        ax.set_xlim(left=0)  # <-- Floor at 0
         ax.set_xlabel("Fantasy Points")
-
-        try:
-            q10, q25, q50, q75, q90 = np.percentile(x, [10, 25, 50, 75, 90])
-            for v in [q10, q25, q50, q75, q90]:
-                ax.axvline(v, alpha=0.15)
-            ax.text(score, 0.08, f"Input: {score:.1f}", ha="center")
-        except Exception:
-            pass
-
+        ax.set_ylabel("Density")
         plt.tight_layout()
         st.pyplot(fig)
 
