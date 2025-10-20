@@ -18,14 +18,25 @@ import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
 
+# Path to your prebuilt CSV (two prior seasons of game logs)
 CSV_PATH = Path(__file__).parent / "data" / "lockin_baseline_2023-24_2024-25.csv"
 
-st.set_page_config(page_title="Lock-In Quick Check", page_icon="✅", layout="centered")
+# ---- Streamlit Page Config ----
+st.set_page_config(
+    page_title="Lock-In Quick Check",
+    page_icon="✅",
+    layout="centered",
+    menu_items={
+        "Get Help": None,
+        "Report a bug": None,
+        "About": None
+    }
+)
+
 st.title("Lock-In Quick Check")
 st.caption("Sample = prior two Regular Seasons + prior current-season games")
 
-
-# ---------- Data loaders ----------
+# ---------- Data Loaders ----------
 @st.cache_data(show_spinner=True)
 def load_baseline(csv_path: Path) -> pd.DataFrame:
     df = pd.read_csv(csv_path)
@@ -62,11 +73,11 @@ def percentile_of(x: float, dist: pd.Series) -> float:
 
 # Stoplight palette (shades per bucket)
 PALETTE = {
-    "LOCK IT IN": ("#0E8542", "#E7F6ED"),  # deep green / very light green bg
-    "Likely lock": ("#38A169", "#F0FBF4"),  # medium green
-    "Borderline": ("#D69E2E", "#FFF8E1"),  # yellow
-    "Usually pass": ("#F59E0B", "#FFF3D9"),  # amber (toward red)
-    "Do not lock": ("#C53030", "#FDE8E8"),  # red
+    "LOCK IT IN": ("#0E8542", "#E7F6ED"),      # deep green / very light green
+    "Likely lock": ("#38A169", "#F0FBF4"),    # medium green
+    "Borderline": ("#D69E2E", "#FFF8E1"),     # yellow
+    "Usually pass": ("#F59E0B", "#FFF3D9"),   # amber
+    "Do not lock": ("#C53030", "#FDE8E8"),    # red
     "Insufficient data": ("#4A5568", "#EDF2F7"),  # gray
 }
 
@@ -88,7 +99,6 @@ def recommendation_from_percentile(p: float) -> str:
 def rec_colors(label: str) -> Tuple[str, str]:
     if label in PALETTE:
         return PALETTE[label]
-    # map close labels to keys
     if label.startswith("Usually pass"):
         return PALETTE["Usually pass"]
     return PALETTE.get("Insufficient data")
@@ -109,7 +119,7 @@ def colored_badge(text: str, fg: str, bg: str) -> str:
     """
 
 
-# ---------- Load data ----------
+# ---------- Load Data ----------
 if not CSV_PATH.exists():
     st.error(f"Baseline CSV not found at: {CSV_PATH}")
     st.stop()
@@ -119,9 +129,7 @@ player_names = get_player_list(df)
 
 # ---------- UI ----------
 col1, col2 = st.columns([2, 1])
-player_sel = col1.selectbox(
-    "Player", options=player_names, index=None, placeholder="Start typing a name…"
-)
+player_sel = col1.selectbox("Player", options=player_names, index=None, placeholder="Start typing a name…")
 score = col2.number_input("Fantasy Score", min_value=0.0, step=0.1, format="%.2f")
 
 go = st.button("Check")
@@ -138,7 +146,6 @@ if go:
     # ---------- Result ----------
     st.subheader("Result")
 
-    # Percentile line
     sample_note = f" (small sample, n={dist.size})" if dist.size < 8 else ""
     st.markdown(f"**Percentile:** {('NA' if pd.isna(pctl) else pctl)}{sample_note}")
 
@@ -153,7 +160,7 @@ if go:
     else:
         x = dist.values.astype(float)
         rng = np.random.default_rng(42)
-        y = rng.normal(loc=0.0, scale=0.04, size=len(x))
+        y = rng.normal(loc=0.0, scale=0.04, size=len(x))  # vertical jitter
 
         fig, ax = plt.subplots(figsize=(8, 2.2))
         ax.scatter(x, y, alpha=0.5, s=14)
@@ -174,12 +181,7 @@ if go:
 
     with st.expander("Distribution summary"):
         if not dist.empty:
-            desc = (
-                pd.Series(dist)
-                .describe(percentiles=[0.1, 0.25, 0.5, 0.75, 0.9])
-                .rename("FP")
-                .to_frame()
-            )
+            desc = pd.Series(dist).describe(percentiles=[0.1, 0.25, 0.5, 0.75, 0.9]).rename("FP").to_frame()
             st.dataframe(desc)
         else:
             st.write("No data available.")
