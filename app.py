@@ -32,6 +32,7 @@ st.set_page_config(
 st.title("Lock-In Quick Check")
 st.caption("Sample = prior two Regular Seasons + prior current-season games")
 
+
 # ---------- Data Loaders ----------
 @st.cache_data(show_spinner=True)
 def load_baseline(csv_path: Path) -> pd.DataFrame:
@@ -69,11 +70,11 @@ def percentile_of(x: float, dist: pd.Series) -> float:
 
 # Stoplight palette (shades per bucket)
 PALETTE = {
-    "LOCK IT IN": ("#0E8542", "#E7F6ED"),      # deep green / very light green
-    "Likely lock": ("#38A169", "#F0FBF4"),    # medium green
-    "Borderline": ("#D69E2E", "#FFF8E1"),     # yellow
-    "Usually pass": ("#F59E0B", "#FFF3D9"),   # amber
-    "Do not lock": ("#C53030", "#FDE8E8"),    # red
+    "LOCK IT IN": ("#0E8542", "#E7F6ED"),  # deep green / very light green
+    "Likely lock": ("#38A169", "#F0FBF4"),  # medium green
+    "Borderline": ("#D69E2E", "#FFF8E1"),  # yellow
+    "Usually pass": ("#F59E0B", "#FFF3D9"),  # amber
+    "Do not lock": ("#C53030", "#FDE8E8"),  # red
     "Insufficient data": ("#4A5568", "#EDF2F7"),  # gray
 }
 
@@ -137,7 +138,7 @@ def kde_curve(x: np.ndarray, points: int = 256) -> Tuple[np.ndarray, np.ndarray]
         return grid, dens
 
     h = 1.06 * std * (n ** (-1 / 5))  # Silverman's rule
-    lo = max(0, x.min() - 1 * std)    # Floor at 0 (no negatives)
+    lo = max(0, x.min() - 1 * std)  # Floor at 0 (no negatives)
     hi = x.max() + 3 * std
     grid = np.linspace(lo, hi, points)
 
@@ -156,7 +157,9 @@ player_names = get_player_list(df)
 
 # ---------- UI ----------
 col1, col2 = st.columns([2, 1])
-player_sel = col1.selectbox("Player", options=player_names, index=None, placeholder="Start typing a name…")
+player_sel = col1.selectbox(
+    "Player", options=player_names, index=None, placeholder="Start typing a name…"
+)
 score = col2.number_input("Fantasy Score", min_value=0.0, step=0.1, format="%.2f")
 
 go = st.button("Check")
@@ -220,7 +223,12 @@ if go:
 
     with st.expander("Distribution summary"):
         if not dist.empty:
-            desc = pd.Series(dist).describe(percentiles=[0.1, 0.25, 0.5, 0.75, 0.9]).rename("FP").to_frame()
+            desc = (
+                pd.Series(dist)
+                .describe(percentiles=[0.1, 0.25, 0.5, 0.75, 0.9])
+                .rename("FP")
+                .to_frame()
+            )
             st.dataframe(desc)
         else:
             st.write("No data available.")
